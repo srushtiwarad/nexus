@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =========================
+   Glass Card
+========================= */
+.glass-card {
+  @apply bg-gray-900/60 backdrop-blur-xl border border-gray-800 shadow-card;
+}
+
+/* =========================
+   Inputs
+========================= */
+.input-premium {
+  @apply w-full px-4 py-2.5 rounded-xl bg-gray-900/60 border border-gray-800 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200;
+}
+
+/* =========================
+   Button
+========================= */
+.btn-primary {
+  @apply w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 text-white font-medium text-sm shadow-glow-indigo hover:shadow-glow-violet hover:scale-[1.01] active:scale-[0.98] transition-all duration-200;
+}
+
+/* =========================
+   Strength bar
+========================= */
+.strength-bar {
+  @apply h-full transition-all duration-300;
+}
+
+.strength-weak {
+  width: 25%;
+  @apply bg-red-500;
+}
+
+.strength-fair {
+  width: 50%;
+  @apply bg-amber-500;
+}
+
+.strength-good {
+  width: 75%;
+  @apply bg-blue-500;
+}
+
+.strength-strong {
+  width: 100%;
+  @apply bg-emerald-500;
+}

@@ -1,0 +1,422 @@
+openapi: 3.1.0
+info:
+  title: Nexus API
+  version: 1.0.0
+  description: |
+    Project & Task Management API.
+    All authenticated endpoints require a Bearer JWT access token.
+    Access tokens expire in 15 minutes; use POST /auth/refresh to rotate.
+
+servers:
+  - url: https://api.nexus.io/api/v1
+    description: Production
+  - url: http://localhost:3001/api/v1
+    description: Local development
+
+security:
+  - BearerAuth: []
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:      { type: string }
+        statusCode: { type: integer }
+        code:       { type: string }
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field: { type: string }
+              msg:   { type: string }
+
+    User:
+      type: object
+      properties:
+        id:        { type: string, format: uuid }
+        email:     { type: string, format: email }
+        fullName:  { type: string }
+        role:      { type: string, enum: [user, admin, superadmin] }
+        avatarUrl: { type: string, nullable: true }
+
+    TokenPair:
+      type: object
+      properties:
+        accessToken:  { type: string }
+        refreshToken: { type: string }
+        expiresIn:    { type: integer, example: 900 }
+        user:         { $ref: '#/components/schemas/User' }
+
+    Project:
+      type: object
+      properties:
+        id:          { type: string, format: uuid }
+        teamId:      { type: string, format: uuid }
+        name:        { type: string }
+        description: { type: string, nullable: true }
+        status:      { type: string, enum: [active, archived, deleted] }
+        color:       { type: string, example: '#6366f1' }
+        startDate:   { type: string, format: date, nullable: true }
+        dueDate:     { type: string, format: date, nullable: true }
+        myRole:      { type: string, enum: [viewer, member, admin, owner] }
+        openTasks:   { type: integer }
+        createdAt:   { type: string, format: date-time }
+        updatedAt:   { type: string, format: date-time }
+
+    Task:
+      type: object
+      properties:
+        id:          { type: string, format: uuid }
+        projectId:   { type: string, format: uuid }
+        parentId:    { type: string, format: uuid, nullable: true }
+        title:       { type: string }
+        description: { type: string, nullable: true }
+        status:      { type: string, enum: [todo, in_progress, in_review, done, cancelled] }
+        priority:    { type: string, enum: [low, medium, high, critical] }
+        assigneeId:  { type: string, format: uuid, nullable: true }
+        reporterId:  { type: string, format: uuid }
+        dueDate:     { type: string, format: date, nullable: true }
+        estimatedHrs: { type: number, nullable: true }
+        tags:        { type: array, items: { type: string } }
+        position:    { type: integer }
+        createdAt:   { type: string, format: date-time }
+        updatedAt:   { type: string, format: date-time }
+
+    Comment:
+      type: object
+      properties:
+        id:          { type: string, format: uuid }
+        taskId:      { type: string, format: uuid }
+        authorId:    { type: string, format: uuid }
+        authorName:  { type: string }
+        body:        { type: string }
+        editedAt:    { type: string, format: date-time, nullable: true }
+        createdAt:   { type: string, format: date-time }
+
+    Notification:
+      type: object
+      properties:
+        id:        { type: string, format: uuid }
+        type:      { type: string }
+        title:     { type: string }
+        body:      { type: string, nullable: true }
+        link:      { type: string, nullable: true }
+        isRead:    { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+paths:
+
+  # ── Auth ────────────────────────────────────────────────────
+  /auth/register:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Register a new account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, fullName]
+              properties:
+                email:    { type: string, format: email }
+                password: { type: string, minLength: 8 }
+                fullName: { type: string, minLength: 2 }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/TokenPair' } } } }
+        '409': { description: Email already registered }
+        '422': { description: Validation error }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Log in with email + password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:    { type: string, format: email }
+                password: { type: string }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/TokenPair' } } } }
+        '401': { description: Invalid credentials }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Rotate access + refresh token pair
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '200': { description: New token pair }
+        '401': { description: Invalid or reused refresh token }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Blacklist current access token
+      responses:
+        '200': { description: Logged out }
+        '401': { description: Unauthenticated }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current authenticated user
+      responses:
+        '200': { description: User profile, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }
+
+  # ── Projects ────────────────────────────────────────────────
+  /projects:
+    get:
+      tags: [Projects]
+      summary: List all projects for authenticated user
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string, enum: [active, archived] }
+        - in: query
+          name: search
+          schema: { type: string }
+      responses:
+        '200': { description: Project list }
+
+    post:
+      tags: [Projects]
+      summary: Create a new project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, teamId]
+              properties:
+                name:        { type: string }
+                description: { type: string }
+                teamId:      { type: string, format: uuid }
+                color:       { type: string, pattern: '^#[0-9a-fA-F]{6}$' }
+                startDate:   { type: string, format: date }
+                dueDate:     { type: string, format: date }
+      responses:
+        '201': { description: Created }
+
+  /projects/{projectId}:
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Projects]
+      summary: Get project detail
+      responses:
+        '200': { description: Project with members and task stats }
+        '403': { description: Not a member }
+        '404': { description: Not found }
+    patch:
+      tags: [Projects]
+      summary: Update project (admin+)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:        { type: string }
+                description: { type: string }
+                color:       { type: string }
+                status:      { type: string, enum: [active, archived] }
+      responses:
+        '200': { description: Updated project }
+
+  # ── Tasks ───────────────────────────────────────────────────
+  /projects/{projectId}/tasks:
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Tasks]
+      summary: List tasks (filterable, paginated)
+      parameters:
+        - { in: query, name: status,     schema: { type: string } }
+        - { in: query, name: priority,   schema: { type: string } }
+        - { in: query, name: assigneeId, schema: { type: string, format: uuid } }
+        - { in: query, name: search,     schema: { type: string } }
+        - { in: query, name: page,       schema: { type: integer, default: 1 } }
+        - { in: query, name: limit,      schema: { type: integer, default: 50 } }
+        - { in: query, name: sortBy,     schema: { type: string, enum: [position, created_at, due_date, priority] } }
+        - { in: query, name: order,      schema: { type: string, enum: [asc, desc] } }
+      responses:
+        '200':
+          description: Paginated task list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Task' } }
+                  pagination:
+                    type: object
+                    properties:
+                      total: { type: integer }
+                      page:  { type: integer }
+                      limit: { type: integer }
+                      pages: { type: integer }
+
+    post:
+      tags: [Tasks]
+      summary: Create a task
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:        { type: string }
+                description:  { type: string }
+                status:       { type: string, enum: [todo, in_progress, in_review, done] }
+                priority:     { type: string, enum: [low, medium, high, critical] }
+                assigneeId:   { type: string, format: uuid }
+                dueDate:      { type: string, format: date }
+                estimatedHrs: { type: number }
+                parentId:     { type: string, format: uuid }
+                tags:         { type: array, items: { type: string } }
+      responses:
+        '201': { description: Created task }
+
+  /projects/{projectId}/tasks/{taskId}:
+    parameters:
+      - { in: path, name: projectId, required: true, schema: { type: string, format: uuid } }
+      - { in: path, name: taskId,    required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Tasks]
+      summary: Get task with subtasks
+      responses:
+        '200': { description: Task detail }
+        '404': { description: Not found }
+    patch:
+      tags: [Tasks]
+      summary: Update task fields
+      responses:
+        '200': { description: Updated task }
+    delete:
+      tags: [Tasks]
+      summary: Cancel task (soft delete, admin+)
+      responses:
+        '200': { description: Cancelled }
+
+  # ── Comments ────────────────────────────────────────────────
+  /projects/{projectId}/tasks/{taskId}/comments:
+    parameters:
+      - { in: path, name: projectId, required: true, schema: { type: string, format: uuid } }
+      - { in: path, name: taskId,    required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Comments]
+      summary: List comments for a task
+      responses:
+        '200': { description: Comment list }
+    post:
+      tags: [Comments]
+      summary: Post a comment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string, maxLength: 10000 }
+      responses:
+        '201': { description: Created comment }
+
+  # ── Notifications ───────────────────────────────────────────
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: Get unread notifications
+      responses:
+        '200': { description: Notification list }
+
+  /notifications/read:
+    post:
+      tags: [Notifications]
+      summary: Mark notifications as read
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ids: { type: array, items: { type: string, format: uuid }, description: 'Empty array = mark all' }
+      responses:
+        '200': { description: Marked as read }
+
+  # ── Teams ───────────────────────────────────────────────────
+  /teams:
+    get:
+      tags: [Teams]
+      summary: List my teams
+      responses:
+        '200': { description: Team list }
+    post:
+      tags: [Teams]
+      summary: Create a team
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        '201': { description: Created }
+
+  /teams/{teamId}/invite:
+    post:
+      tags: [Teams]
+      summary: Invite a user by email (admin+)
+      parameters:
+        - { in: path, name: teamId, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+                role:  { type: string, enum: [viewer, member, admin] }
+      responses:
+        '200': { description: Member added }
+        '404': { description: User not found }
