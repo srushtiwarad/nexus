@@ -193,11 +193,10 @@ function getPool() {
   return pool;
 }
 
-// Helper: converts PostgreSQL $1,$2 placeholders to MySQL ?
+// Standard MySQL query helper
 async function query(text, params) {
   const start = Date.now();
-  const mysqlText = text.replace(/\$\d+/g, '?');
-  const [rows] = await getPool().execute(mysqlText, params);
+  const [rows] = await getPool().execute(text, params);
   const duration = Date.now() - start;
   if (duration > 1000) logger.warn(`Slow query (${duration}ms): ${text.slice(0, 80)}`);
   return { rows: Array.isArray(rows) ? rows : [rows] };
