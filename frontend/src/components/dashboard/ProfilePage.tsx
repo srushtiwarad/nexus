@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useAuthStore } from '@/store/auth.store';
-import { usersAPI, authAPI } from '@/services/api';
+import { useAuthStore } from '../../store/auth.store';
+import { usersAPI, authAPI } from '../../services/api';
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -71,7 +71,7 @@ export default function ProfilePage() {
   });
 
   return (
-    <div className="p-8 max-w-2xl">
+    <div className="p-8 max-w-4xl mx-auto w-full">
       <div className="mb-8 flex items-center gap-4">
         <div className="w-16 h-16 bg-indigo-500 rounded-2xl flex items-center justify-center text-white font-bold text-xl flex-shrink-0">
           {user?.fullName?.split(' ').map((n: string) => n[0]).join('').slice(0,2).toUpperCase()}

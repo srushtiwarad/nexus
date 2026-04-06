@@ -2,12 +2,12 @@
 import { useMemo, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { milestonesAPI, projectsAPI, tasksAPI } from '@/services/api';
-import { useWebSocket, type WSMessage } from '@/hooks/useWebSocket';
-import { useTasks, useCreateTask } from '@/hooks/useTasks';
-import TaskDetailPanel from '@/components/tasks/TaskDetailPanel';
-import { useAuthStore } from '@/store/auth.store';
-import type { Task } from '@/types';
+import { milestonesAPI, projectsAPI, tasksAPI } from '../../services/api';
+import { useWebSocket, type WSMessage } from '../../hooks/useWebSocket';
+import { useTasks, useCreateTask } from '../../hooks/useTasks';
+import TaskDetailPanel from '../tasks/TaskDetailPanel';
+import { useAuthStore } from '../../store/auth.store';
+import type { Task } from '../../types';
 
 const COLUMNS: { key: Task['status']; label: string; color: string }[] = [
   { key: 'todo',        label: 'To do',       color: 'text-gray-400' },

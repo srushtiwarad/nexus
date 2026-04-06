@@ -109,20 +109,14 @@ router.post('/', writeRateLimiter, auditLog('team'), async (req, res, next) => {
     const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
     const created = await withTransaction(async (conn) => {
-      await conn.execute(
-        'INSERT INTO teams (name, slug, owner_id) VALUES (?, ?, ?)',
+      const res = await conn.query(
+        'INSERT INTO teams (name, slug, owner_id) VALUES ($1, $2, $3) RETURNING *',
         [name.trim(), slug, req.user.id]
       );
-
-      const [rows] = await conn.execute(
-        'SELECT * FROM teams WHERE slug = ? ORDER BY created_at DESC LIMIT 1',
-        [slug]
-      );
-      const team = Array.isArray(rows) ? rows[0] : rows;
-      if (!team?.id) throw new AppError('Failed to create team', 500);
-
-      await conn.execute(
-        'INSERT INTO team_members (team_id, user_id, role) VALUES (?, ?, ?)',
+      const team = res.rows[0];
+      
+      await conn.query(
+        'INSERT INTO team_members (team_id, user_id, role) VALUES ($1, $2, $3)',
         [team.id, req.user.id, 'owner']
       );
       return team;
@@ -146,7 +140,7 @@ router.post('/:teamId/invite', validateUUID('teamId'), writeRateLimiter, auditLo
       await query(
         `INSERT INTO pending_invitations (team_id, email, role, invited_by)
          VALUES ($1, $2, $3, $4)
-         ON DUPLICATE KEY UPDATE role = VALUES(role), invited_by = VALUES(invited_by)`,
+         ON CONFLICT (team_id, email) DO UPDATE SET role = EXCLUDED.role, invited_by = EXCLUDED.invited_by`,
         [req.params.teamId, email, role, req.user.id]
       );
       return res.json({ message: 'Invitation saved. Member will be added after they register/login.' });
@@ -156,7 +150,7 @@ router.post('/:teamId/invite', validateUUID('teamId'), writeRateLimiter, auditLo
     await query(
       `INSERT INTO team_members (team_id, user_id, role)
        VALUES ($1, $2, $3)
-       ON DUPLICATE KEY UPDATE role = VALUES(role)`,
+       ON CONFLICT (team_id, user_id) DO UPDATE SET role = EXCLUDED.role`,
       [req.params.teamId, inviteeId, role]
     );
     res.json({ message: 'Member added successfully' });

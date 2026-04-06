@@ -2,10 +2,10 @@
 // Full task detail panel — status, comments, attachments.
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, tasksAPI } from '@/services/api';
+import { api, tasksAPI } from '../../services/api';
 import { format } from 'date-fns';
-import type { Task, Comment } from '@/types';
-import { normalizeComment, normalizeTask } from '@/normalize';
+import type { Task, Comment } from '../../types';
+import { normalizeComment, normalizeTask } from '../../normalize';
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   todo:        { label: 'To do',       color: 'text-gray-400' },

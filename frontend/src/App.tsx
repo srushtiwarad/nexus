@@ -1,17 +1,17 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { useAuthStore } from '@/store/auth.store';
-import LoginPage from '@/components/auth/LoginPage';
-import RegisterPage from '@/components/auth/RegisterPage';
-import VerifyEmailPage from '@/components/auth/VerifyEmailPage';
-import ForgotPasswordPage from '@/components/auth/ForgotPasswordPage';
-import ResetPasswordPage from '@/components/auth/ResetPasswordPage';
-import OAuthSuccessPage from '@/components/auth/OAuthSuccessPage';
-import DashboardLayout from '@/components/dashboard/DashboardLayout';
-import DashboardHome from '@/components/dashboard/DashboardHome';
-import ProjectsPage from '@/components/projects/ProjectsPage';
-import ProjectBoard from '@/components/projects/ProjectBoard';
-import ProfilePage from '@/components/dashboard/ProfilePage';
-import TeamMembersPage from '@/components/teams/TeamMembersPage';
+import { useAuthStore } from './store/auth.store';
+import LoginPage from './components/auth/LoginPage';
+import RegisterPage from './components/auth/RegisterPage';
+import VerifyEmailPage from './components/auth/VerifyEmailPage';
+import ForgotPasswordPage from './components/auth/ForgotPasswordPage';
+import ResetPasswordPage from './components/auth/ResetPasswordPage';
+import OAuthSuccessPage from './components/auth/OAuthSuccessPage';
+import DashboardLayout from './components/dashboard/DashboardLayout';
+import DashboardHome from './components/dashboard/DashboardHome';
+import ProjectsPage from './components/projects/ProjectsPage';
+import ProjectBoard from './components/projects/ProjectBoard';
+import ProfilePage from './components/dashboard/ProfilePage';
+import TeamMembersPage from './components/teams/TeamMembersPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);

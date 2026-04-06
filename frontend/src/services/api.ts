@@ -3,7 +3,7 @@
 // Axios instance with JWT refresh, queuing, and all API helpers
 // ============================================================
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
-import { useAuthStore } from '@/store/auth.store';
+import { useAuthStore } from '../store/auth.store';
 
 const BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 

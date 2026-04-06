@@ -14,16 +14,14 @@ router.get('/summary', async (req, res, next) => {
     try {
       await query(
         `CREATE TABLE IF NOT EXISTS project_milestones (
-          id          CHAR(36)     PRIMARY KEY DEFAULT (UUID()),
-          project_id  CHAR(36)     NOT NULL,
+          id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+          project_id  UUID         NOT NULL,
           title       VARCHAR(255) NOT NULL,
           due_date    DATE         NOT NULL,
-          created_by  CHAR(36)     NOT NULL,
-          created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-          INDEX idx_milestones_project (project_id),
-          INDEX idx_milestones_due (due_date)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`
+          created_by  UUID         NOT NULL,
+          created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+          updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+        )`
       );
     } catch {
       // best-effort
@@ -37,8 +35,8 @@ router.get('/summary', async (req, res, next) => {
       `
       SELECT DISTINCT p.*
       FROM projects p
-      LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ?
-      WHERE (p.created_by = ? OR pm.user_id = ?)
+      LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = $1
+      WHERE (p.created_by = $2 OR pm.user_id = $3)
         AND p.status = 'active'
       ORDER BY p.updated_at DESC
       `,
@@ -67,7 +65,7 @@ router.get('/summary', async (req, res, next) => {
     }
 
     // Tasks across those projects
-    const taskPlaceholders = projectIds.map(() => '?').join(',');
+    const taskPlaceholders = projectIds.map((_, i) => `$${i + 1}`).join(',');
     const taskResult = await query(
       `
       SELECT
@@ -109,7 +107,7 @@ router.get('/summary', async (req, res, next) => {
     // Milestones
     let milestones = [];
     try {
-      const milestonePlaceholders = projectIds.map(() => '?').join(',');
+      const milestonePlaceholders = projectIds.map((_, i) => `$${i + 1}`).join(',');
       const milestonesResult = await query(
         `
         SELECT id, project_id, title, due_date

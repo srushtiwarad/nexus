@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { authAPI } from '@/services/api';
-import { useAuthStore } from '@/store/auth.store';
+import { authAPI } from '../../services/api';
+import { useAuthStore } from '../../store/auth.store';
 
 export default function OAuthSuccessPage() {
   const navigate = useNavigate();

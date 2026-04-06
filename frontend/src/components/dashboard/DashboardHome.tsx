@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { useAuthStore } from '@/store/auth.store';
-import { api, dashboardAPI, notificationsAPI, projectsAPI } from '@/services/api';
+import { useAuthStore } from '../../store/auth.store';
+import { api, dashboardAPI, notificationsAPI, projectsAPI } from '../../services/api';
 import { format, isToday, isTomorrow, isPast, parseISO } from 'date-fns';
 
 function StatCard({ label, value, icon, color, sub }: { label: string; value: string | number; icon: React.ReactNode; color: string; sub?: string }) {

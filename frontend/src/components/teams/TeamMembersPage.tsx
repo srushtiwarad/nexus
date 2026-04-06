@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { teamsAPI } from '@/services/api';
-import { useAuthStore } from '@/store/auth.store';
+import { teamsAPI } from '../../services/api';
+import { useAuthStore } from '../../store/auth.store';
 
 function Badge({ children, tone = 'gray' }: { children: React.ReactNode; tone?: 'gray' | 'indigo' | 'emerald' | 'amber' }) {
   const cls =

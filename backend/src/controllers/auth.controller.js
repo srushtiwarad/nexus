@@ -52,7 +52,7 @@ async function createSessionAndTokens(req, user) {
   await query(
     `INSERT INTO sessions 
      (id, user_id, refresh_token, jti, ip_address, user_agent, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
     [
       uuidv4(),
       user.id,
@@ -76,7 +76,7 @@ async function register(req, res, next) {
 
     const { email, password, fullName } = req.body;
 
-    const existing = await query('SELECT id FROM users WHERE email = ?', [email]);
+    const existing = await query('SELECT id FROM users WHERE email = $1', [email]);
 
     if (existing.rows.length > 0)
       throw new AppError('Email already registered', 409);
@@ -89,7 +89,7 @@ async function register(req, res, next) {
     await query(
       `INSERT INTO users 
        (id, email, password_hash, full_name, email_verified)
-       VALUES (?, ?, ?, ?, 1)`,
+       VALUES ($1, $2, $3, $4, TRUE)`,
       [userId, email, hash, fullName]
     );
 
@@ -127,12 +127,9 @@ async function login(req, res, next) {
     console.log('🔐 LOGIN ATTEMPT - Email:', email);
 
     const users = await query(
-      `SELECT * FROM users WHERE email = ?`,
+      `SELECT * FROM users WHERE email = $1`,
       [email]
     );
-
-    console.log('📊 QUERY RESULT:', users);
-    console.log('📊 ROWS LENGTH:', users?.rows?.length);
 
     if (!users || !users.rows || users.rows.length === 0) {
       console.log('❌ USER NOT FOUND:', email);
@@ -157,12 +154,12 @@ async function login(req, res, next) {
       throw new AppError('Account suspended', 403);
     }
 
-    if (user.email_verified === 0) {
+    if (!user.email_verified) {
       throw new AppError('Verify your email first', 403);
     }
 
     await query(
-      'UPDATE users SET last_login_at = NOW() WHERE id = ?',
+      'UPDATE users SET last_login_at = NOW() WHERE id = $1',
       [user.id]
     );
 
@@ -193,7 +190,7 @@ async function googleCallback(req, res, next) {
     const email = profile.emails?.[0]?.value;
     if (!email) throw new AppError('Google email not available', 401);
 
-    const result = await query('SELECT * FROM users WHERE email = ?', [email]);
+    const result = await query('SELECT * FROM users WHERE email = $1', [email]);
     let user = result.rows[0];
 
     if (!user) {
@@ -203,11 +200,11 @@ async function googleCallback(req, res, next) {
 
       await query(
         `INSERT INTO users (id, email, password_hash, full_name, email_verified)
-         VALUES (?, ?, ?, ?, 1)`,
+         VALUES ($1, $2, $3, $4, TRUE)`,
         [userId, email, hashedPassword, profile.displayName || email]
       );
 
-      const newUser = await query('SELECT * FROM users WHERE id = ?', [userId]);
+      const newUser = await query('SELECT * FROM users WHERE id = $1', [userId]);
       user = newUser.rows[0];
     }
 
@@ -227,14 +224,12 @@ async function githubCallback(req, res, next) {
     const profile = req.user;
     if (!profile) throw new AppError('GitHub auth failed', 401);
 
-    // Some users don't have public emails. Passport-github2 requests 'user:email' scope,
-    // but we should still handle the fallback.
     const email = profile.emails?.[0]?.value || profile._json?.email || `${profile.username}@github.com`;
     const fullName = profile.displayName || profile.username || email.split('@')[0];
 
     console.log(`🐙 GITHUB LOGIN: ${email} (${fullName})`);
 
-    const result = await query('SELECT * FROM users WHERE email = ?', [email]);
+    const result = await query('SELECT * FROM users WHERE email = $1', [email]);
     let user = result.rows[0];
 
     if (!user) {
@@ -245,11 +240,11 @@ async function githubCallback(req, res, next) {
 
       await query(
         `INSERT INTO users (id, email, password_hash, full_name, email_verified)
-         VALUES (?, ?, ?, ?, 1)`,
+         VALUES ($1, $2, $3, $4, TRUE)`,
         [userId, email, hashedPassword, fullName]
       );
 
-      const newUser = await query('SELECT * FROM users WHERE id = ?', [userId]);
+      const newUser = await query('SELECT * FROM users WHERE id = $1', [userId]);
       user = newUser.rows[0];
     }
 
@@ -272,7 +267,7 @@ async function logout(req, res, next) {
   try {
     if (req.tokenJTI) {
       await blacklistToken(req.tokenJTI, 900);
-      await query('UPDATE sessions SET is_revoked = 1 WHERE jti = ?', [req.tokenJTI]);
+      await query('UPDATE sessions SET is_revoked = TRUE WHERE jti = $1', [req.tokenJTI]);
     }
     res.json({ message: 'Logged out' });
   } catch (err) { next(err); }
@@ -285,7 +280,7 @@ async function logoutAll(req, res, next) {
     const userId = req.user?.id;
     if (!userId) throw new AppError('Unauthorized', 401);
 
-    await query('UPDATE sessions SET is_revoked = 1 WHERE user_id = ?', [userId]);
+    await query('UPDATE sessions SET is_revoked = TRUE WHERE user_id = $1', [userId]);
 
     if (req.tokenJTI) {
       await blacklistToken(req.tokenJTI, 900);

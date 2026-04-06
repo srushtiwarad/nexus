@@ -20,23 +20,18 @@ router.post('/:pid/tasks',
 
       if (!title) return next(new AppError('Title is required', 422));
 
-      const validPriority = ['low', 'medium', 'high'];
+      const validPriority = ['low', 'medium', 'high', 'critical'];
       if (!validPriority.includes(priority)) {
         return next(new AppError('Invalid priority', 422));
       }
 
-      await query(
-        `INSERT INTO tasks (id, project_id, title, priority, status)
-         VALUES (UUID(), ?, ?, ?, ?)`,
-        [projectId, title, priority, status]
+      const result = await query(
+        `INSERT INTO tasks (id, project_id, title, priority, status, reporter_id)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5) RETURNING *`,
+        [projectId, title, priority, status, req.user.id]
       );
 
-      const task = await query(
-        `SELECT * FROM tasks WHERE project_id = ? ORDER BY created_at DESC LIMIT 1`,
-        [projectId]
-      );
-
-      res.status(201).json(task.rows[0]);
+      res.status(201).json(result.rows[0]);
     } catch (err) {
       next(err);
     }
@@ -52,17 +47,15 @@ router.get('/:pid/tasks',
       const projectId = req.params.pid;
       const { status } = req.query;
 
-      if (!projectId.match(/^[0-9a-fA-F-]{36}$/)) {
-        return next(new AppError('Invalid project ID', 400));
-      }
-
-      let sql = `SELECT * FROM tasks WHERE project_id = ?`;
+      let sql = `SELECT * FROM tasks WHERE project_id = $1`;
       const params = [projectId];
 
       if (status) {
-        sql += ` AND status = ?`;
+        sql += ` AND status = $2`;
         params.push(status);
       }
+
+      sql += ` ORDER BY created_at DESC`;
 
       const result = await query(sql, params);
 
@@ -88,7 +81,7 @@ router.get('/:pid/tasks/:taskId',
       const { taskId } = req.params;
 
       const result = await query(
-        `SELECT * FROM tasks WHERE id = ?`,
+        `SELECT * FROM tasks WHERE id = $1`,
         [taskId]
       );
 
@@ -113,23 +106,23 @@ router.patch('/:pid/tasks/:taskId',
       const { taskId } = req.params;
       const updates = req.body;
 
-      const allowedFields = ['title', 'status', 'priority'];
+      const allowedFields = ['title', 'status', 'priority', 'description', 'assignee_id', 'due_date'];
       const fields = Object.keys(updates).filter(f => allowedFields.includes(f));
 
       if (fields.length === 0) {
         return next(new AppError('No valid fields provided', 400));
       }
 
-      const setClause = fields.map(f => `${f} = ?`).join(', ');
+      const setClause = fields.map((f, i) => `${f} = $${i + 1}`).join(', ');
       const values = fields.map(f => updates[f]);
 
       await query(
-        `UPDATE tasks SET ${setClause} WHERE id = ?`,
+        `UPDATE tasks SET ${setClause} WHERE id = $${fields.length + 1}`,
         [...values, taskId]
       );
 
       const updated = await query(
-        `SELECT * FROM tasks WHERE id = ?`,
+        `SELECT * FROM tasks WHERE id = $1`,
         [taskId]
       );
 
@@ -150,7 +143,7 @@ router.delete('/:pid/tasks/:taskId',
       const { taskId } = req.params;
 
       await query(
-        `UPDATE tasks SET status = 'cancelled' WHERE id = ?`,
+        `UPDATE tasks SET status = 'cancelled' WHERE id = $1`,
         [taskId]
       );
 

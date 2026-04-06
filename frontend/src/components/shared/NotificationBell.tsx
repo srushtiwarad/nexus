@@ -1,10 +1,10 @@
 // nexus/frontend/src/components/shared/NotificationBell.tsx
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/services/api';
-import { useWebSocket } from '@/hooks/useWebSocket';
+import { api } from '../../services/api';
+import { useWebSocket } from '../../hooks/useWebSocket';
 import { formatDistanceToNow } from 'date-fns';
-import type { Notification } from '@/types';
+import type { Notification } from '../../types';
 
 function fetchNotifications(): Promise<Notification[]> {
   return api.get('/notifications').then(r => r.data);

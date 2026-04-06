@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Link, Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { useAuthStore } from '@/store/auth.store';
-import { projectsAPI, authAPI } from '@/services/api';
+import { useAuthStore } from '../../store/auth.store';
+import { projectsAPI, authAPI } from '../../services/api';
 
 function Avatar({ name, size = 8 }: { name: string; size?: number }) {
   const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();

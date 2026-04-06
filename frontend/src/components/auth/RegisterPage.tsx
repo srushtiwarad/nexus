@@ -1,8 +1,8 @@
 // nexus/frontend/src/components/auth/RegisterPage.tsx
 import { useState, FormEvent, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { authAPI } from '@/services/api';
-import { useAuthStore } from '@/store/auth.store';
+import { authAPI } from '../../services/api';
+import { useAuthStore } from '../../store/auth.store';
 
 function getPasswordStrength(pwd: string): { level: string; label: string; class: string } {
   if (!pwd) return { level: 'none', label: '', class: '' };

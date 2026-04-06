@@ -1,4 +1,4 @@
-import type { Task, Comment } from '@/types';
+import type { Task, Comment } from './types';
 
 function parseMaybeJsonArray(value: unknown): string[] {
   if (!value) return [];

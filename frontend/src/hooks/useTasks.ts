@@ -1,7 +1,7 @@
 // nexus/frontend/src/hooks/useTasks.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { tasksAPI } from '@/services/api';
-import { normalizeTask } from '@/normalize';
+import { tasksAPI } from '../services/api';
+import { normalizeTask } from '../normalize';
 
 export interface TaskFilters {
   status?: string;

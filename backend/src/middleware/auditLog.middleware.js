@@ -14,9 +14,9 @@ async function writeAuditRecord({ userId, action, resource, resourceId, meta, ip
   try {
     await query(
       `INSERT INTO audit_logs
-       (user_id, action, resource, resource_id, meta, ip_address, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
-      [userId, action, resource, resourceId, JSON.stringify(meta || {}), ip, status]
+       (user_id, action, resource, resource_id, meta, ip_address, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [userId, action, resource, resourceId, meta || {}, ip, status]
     );
   } catch (err) {
     // Audit failures must never block the request — log and continue

@@ -33,7 +33,7 @@ async function createNotification({ userId, type, title, body = null, link = nul
     await query(
       `
       INSERT INTO notifications (id, user_id, type, title, body, link, is_read)
-      VALUES ($1, $2, $3, $4, $5, $6, 0)
+      VALUES ($1, $2, $3, $4, $5, $6, FALSE)
       `,
       [id, userId, type, title, body, link]
     );
@@ -73,6 +73,10 @@ async function notifyStatusChange({ task, changedByName, recipientId }) {
   });
 }
 
+async function notifyStatusChangeMany({ task, changedByName, recipientIds }) {
+  // Logic for many recipients if needed
+}
+
 async function notifyCommentAdded({ task, commentAuthorName, recipientId }) {
   return createNotification({
     userId: recipientId,
@@ -95,15 +99,12 @@ async function notifyProjectInvite({ projectName, inviterName, recipientId, proj
 
 // ── Fetch unread notifications for a user ─────────────────────
 async function getUnreadNotifications(userId, limit = 20) {
-  // MySQL execute() doesn't support LIMIT with ? placeholder,
-  // so we interpolate the integer limit directly (safe: internally controlled).
-  const safeLimit = parseInt(limit, 10) || 20;
   const result = await query(`
     SELECT * FROM notifications
-    WHERE user_id = ? AND is_read = 0
+    WHERE user_id = $1 AND is_read = FALSE
     ORDER BY created_at DESC
-    LIMIT ${safeLimit}
-  `, [userId]);
+    LIMIT $2
+  `, [userId, parseInt(limit, 10) || 20]);
   return result.rows;
 }
 
@@ -111,12 +112,12 @@ async function getUnreadNotifications(userId, limit = 20) {
 async function markAsRead(userId, notificationIds) {
   if (!notificationIds?.length) {
     // Mark all
-    await query('UPDATE notifications SET is_read = 1 WHERE user_id = ?', [userId]);
+    await query('UPDATE notifications SET is_read = TRUE WHERE user_id = $1', [userId]);
   } else {
-    const placeholders = notificationIds.map(() => '?').join(',');
-    await query(
-      `UPDATE notifications SET is_read = 1 WHERE user_id = ? AND id IN (${placeholders})`,
-      [userId, ...notificationIds]
+    // Standard approach for dynamic IN clause in pg
+    const result = await query(
+      `UPDATE notifications SET is_read = TRUE WHERE user_id = $1 AND id = ANY($2::uuid[])`,
+      [userId, notificationIds]
     );
   }
 }

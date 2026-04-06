@@ -1,6 +1,6 @@
 // nexus/frontend/src/hooks/useWebSocket.ts
 import { useEffect, useRef, useCallback } from 'react';
-import { useAuthStore } from '@/store/auth.store';
+import { useAuthStore } from '../store/auth.store';
 
 export type WSMessage = { type: string; [key: string]: unknown };
 type MessageHandler = (msg: WSMessage) => void;

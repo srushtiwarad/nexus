@@ -218,30 +218,47 @@ client = createInMemoryRedis();
 
 async function connectRedis() {
   if (process.env.SKIP_REDIS === 'true') {
-    logger.info('Skipping Redis connection (SKIP_REDIS=true). Using in-memory fallback.');
+    logger.info('SKIP_REDIS=true — using in-memory Redis fallback.');
     client = createInMemoryRedis();
     return;
   }
+
   const realClient = new Redis(redisConfig);
   client = realClient;
 
-  // Prevent "Unhandled error event" spam if Redis is down.
-  realClient.on('error', (err) => logger.error('Redis error:', err?.message || err));
+  // Prevent "Unhandled error event" if Redis is down.
+  realClient.on('error', (err) => {
+    if (client instanceof Redis) {
+      logger.warn(`Redis connection error (${redisConfig.host}): ${err.message}. Falling back to in-memory.`);
+      client.disconnect();
+      client = createInMemoryRedis();
+    }
+  });
+
   realClient.on('reconnecting', () => logger.warn('Redis reconnecting…'));
 
   try {
     await new Promise((resolve, reject) => {
+      // Short timeout for Redis connection to avoid blocking the app start too long
+      const timeout = setTimeout(() => {
+        realClient.disconnect();
+        reject(new Error('Redis connection timeout'));
+      }, 5000);
+
       realClient.once('ready', () => {
+        clearTimeout(timeout);
         logger.info(`Redis connected: ${redisConfig.host}`);
         resolve();
       });
-      realClient.once('error', reject);
+
+      realClient.once('error', (err) => {
+        clearTimeout(timeout);
+        reject(err);
+      });
     });
 
   } catch (err) {
-    logger.error(`Redis connection failed (${redisConfig.host}:${redisConfig.port}): ${err.message}`);
-    // In dev, keep going with an in-memory fallback.
-    if (process.env.NODE_ENV === 'production') throw err;
+    logger.warn(`Redis connection failed (${redisConfig.host}:${redisConfig.port}): ${err.message}. Using in-memory fallback.`);
     realClient.disconnect();
     client = createInMemoryRedis();
   }

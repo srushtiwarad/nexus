@@ -1,7 +1,6 @@
 -- ============================================================
 -- nexus/backend/migrations/001_initial_schema.sql
 -- Complete PostgreSQL schema for Nexus.
--- Run with: psql $DATABASE_URL -f 001_initial_schema.sql
 -- ============================================================
 
 -- Extensions
@@ -10,33 +9,85 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE EXTENSION IF NOT EXISTS "pg_trgm"; -- trigram search
 
 -- ── ENUMS ────────────────────────────────────────────────────
-CREATE TYPE user_role       AS ENUM ('user', 'admin', 'superadmin');
-CREATE TYPE project_status  AS ENUM ('active', 'archived', 'deleted');
-CREATE TYPE task_status     AS ENUM ('todo', 'in_progress', 'in_review', 'done', 'cancelled');
-CREATE TYPE task_priority   AS ENUM ('low', 'medium', 'high', 'critical');
-CREATE TYPE member_role     AS ENUM ('viewer', 'member', 'admin', 'owner');
-CREATE TYPE notif_type      AS ENUM ('task_assigned', 'task_due', 'comment_added',
+DO $$ BEGIN
+    CREATE TYPE user_role       AS ENUM ('user', 'admin', 'superadmin');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE project_status  AS ENUM ('active', 'archived', 'deleted');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE task_status     AS ENUM ('todo', 'in_progress', 'in_review', 'done', 'cancelled');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE task_priority   AS ENUM ('low', 'medium', 'high', 'critical');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE member_role     AS ENUM ('viewer', 'member', 'admin', 'owner');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE notif_type      AS ENUM ('task_assigned', 'task_due', 'comment_added',
                                      'mention', 'project_invite', 'status_change');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 -- ── USERS ────────────────────────────────────────────────────
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id              UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
   email           TEXT        NOT NULL UNIQUE,
-  password_hash   TEXT        NOT NULL,
+  password_hash   TEXT,
   full_name       TEXT        NOT NULL,
   avatar_url      TEXT,
+  bio             TEXT,
   role            user_role   NOT NULL DEFAULT 'user',
   is_suspended    BOOLEAN     NOT NULL DEFAULT FALSE,
   email_verified  BOOLEAN     NOT NULL DEFAULT FALSE,
+  google_id       TEXT        UNIQUE,
+  github_id       TEXT        UNIQUE,
+  email_verify_token VARCHAR(64),
+  email_verify_expires TIMESTAMPTZ,
+  password_reset_token VARCHAR(64),
+  password_reset_expires TIMESTAMPTZ,
   last_login_at   TIMESTAMPTZ,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_users_email ON users (email);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
+
+-- ── SESSIONS ─────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS sessions (
+  id            UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id       UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  refresh_token TEXT         NOT NULL UNIQUE,
+  jti           TEXT         NOT NULL UNIQUE,
+  ip_address    VARCHAR(45),
+  user_agent    TEXT,
+  is_revoked    BOOLEAN      NOT NULL DEFAULT FALSE,
+  expires_at    TIMESTAMPTZ  NOT NULL,
+  created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions (user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_jti ON sessions (jti);
 
 -- ── TEAMS ────────────────────────────────────────────────────
-CREATE TABLE teams (
+CREATE TABLE IF NOT EXISTS teams (
   id          UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
   name        TEXT        NOT NULL,
   slug        TEXT        NOT NULL UNIQUE,
@@ -47,7 +98,7 @@ CREATE TABLE teams (
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE team_members (
+CREATE TABLE IF NOT EXISTS team_members (
   team_id     UUID        NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
   user_id     UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   role        member_role NOT NULL DEFAULT 'member',
@@ -55,10 +106,21 @@ CREATE TABLE team_members (
   PRIMARY KEY (team_id, user_id)
 );
 
+-- ── PENDING TEAM INVITATIONS ─────────────────────────────────
+CREATE TABLE IF NOT EXISTS pending_invitations (
+  id          BIGSERIAL   PRIMARY KEY,
+  team_id     UUID        NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  email       TEXT        NOT NULL,
+  role        member_role NOT NULL DEFAULT 'member',
+  invited_by  UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(team_id, email)
+);
+
 -- ── PROJECTS ─────────────────────────────────────────────────
-CREATE TABLE projects (
+CREATE TABLE IF NOT EXISTS projects (
   id          UUID           PRIMARY KEY DEFAULT uuid_generate_v4(),
-  team_id     UUID           NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  team_id     UUID           REFERENCES teams(id) ON DELETE CASCADE,
   name        TEXT           NOT NULL,
   description TEXT,
   status      project_status NOT NULL DEFAULT 'active',
@@ -70,10 +132,10 @@ CREATE TABLE projects (
   updated_at  TIMESTAMPTZ    NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_projects_team  ON projects (team_id);
-CREATE INDEX idx_projects_status ON projects (status);
+CREATE INDEX IF NOT EXISTS idx_projects_team  ON projects (team_id);
+CREATE INDEX IF NOT EXISTS idx_projects_status ON projects (status);
 
-CREATE TABLE project_members (
+CREATE TABLE IF NOT EXISTS project_members (
   project_id  UUID        NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   user_id     UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   role        member_role NOT NULL DEFAULT 'member',
@@ -82,7 +144,7 @@ CREATE TABLE project_members (
 );
 
 -- ── TASKS ────────────────────────────────────────────────────
-CREATE TABLE tasks (
+CREATE TABLE IF NOT EXISTS tasks (
   id            UUID          PRIMARY KEY DEFAULT uuid_generate_v4(),
   project_id    UUID          NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   parent_id     UUID          REFERENCES tasks(id) ON DELETE CASCADE, -- subtasks
@@ -101,14 +163,13 @@ CREATE TABLE tasks (
   updated_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_tasks_project   ON tasks (project_id);
-CREATE INDEX idx_tasks_assignee  ON tasks (assignee_id);
-CREATE INDEX idx_tasks_status    ON tasks (status);
-CREATE INDEX idx_tasks_due_date  ON tasks (due_date) WHERE due_date IS NOT NULL;
-CREATE INDEX idx_tasks_search    ON tasks USING GIN (to_tsvector('english', title || ' ' || COALESCE(description, '')));
+CREATE INDEX IF NOT EXISTS idx_tasks_project   ON tasks (project_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_assignee  ON tasks (assignee_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_status    ON tasks (status);
+CREATE INDEX IF NOT EXISTS idx_tasks_due_date  ON tasks (due_date) WHERE due_date IS NOT NULL;
 
 -- ── COMMENTS ─────────────────────────────────────────────────
-CREATE TABLE comments (
+CREATE TABLE IF NOT EXISTS comments (
   id          UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
   task_id     UUID        NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   author_id   UUID        NOT NULL REFERENCES users(id),
@@ -117,10 +178,10 @@ CREATE TABLE comments (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_comments_task ON comments (task_id);
+CREATE INDEX IF NOT EXISTS idx_comments_task ON comments (task_id);
 
 -- ── ATTACHMENTS ──────────────────────────────────────────────
-CREATE TABLE attachments (
+CREATE TABLE IF NOT EXISTS attachments (
   id          UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
   task_id     UUID        NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   uploader_id UUID        NOT NULL REFERENCES users(id),
@@ -132,7 +193,7 @@ CREATE TABLE attachments (
 );
 
 -- ── NOTIFICATIONS ─────────────────────────────────────────────
-CREATE TABLE notifications (
+CREATE TABLE IF NOT EXISTS notifications (
   id          UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id     UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   type        notif_type  NOT NULL,
@@ -143,10 +204,10 @@ CREATE TABLE notifications (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_notifs_user_unread ON notifications (user_id, is_read) WHERE NOT is_read;
+CREATE INDEX IF NOT EXISTS idx_notifs_user_unread ON notifications (user_id, is_read) WHERE NOT is_read;
 
 -- ── AUDIT LOGS ────────────────────────────────────────────────
-CREATE TABLE audit_logs (
+CREATE TABLE IF NOT EXISTS audit_logs (
   id          BIGSERIAL   PRIMARY KEY,
   user_id     UUID        REFERENCES users(id) ON DELETE SET NULL,
   action      TEXT        NOT NULL,
@@ -156,17 +217,10 @@ CREATE TABLE audit_logs (
   ip_address  INET,
   status      TEXT        NOT NULL,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-) PARTITION BY RANGE (created_at);
+);
 
--- Monthly partitions for audit_logs (add more as needed)
-CREATE TABLE audit_logs_2025_01 PARTITION OF audit_logs
-  FOR VALUES FROM ('2025-01-01') TO ('2025-02-01');
-CREATE TABLE audit_logs_2025_q2 PARTITION OF audit_logs
-  FOR VALUES FROM ('2025-04-01') TO ('2025-07-01');
-CREATE TABLE audit_logs_default PARTITION OF audit_logs DEFAULT;
-
-CREATE INDEX idx_audit_user    ON audit_logs (user_id);
-CREATE INDEX idx_audit_action  ON audit_logs (action, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_user    ON audit_logs (user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_action  ON audit_logs (action, created_at DESC);
 
 -- ── UPDATED_AT TRIGGER ────────────────────────────────────────
 CREATE OR REPLACE FUNCTION set_updated_at()
@@ -179,11 +233,15 @@ DECLARE t TEXT;
 BEGIN
   FOREACH t IN ARRAY ARRAY['users','teams','projects','tasks']
   LOOP
-    EXECUTE format(
-      'CREATE TRIGGER trg_%s_updated_at
-       BEFORE UPDATE ON %s
-       FOR EACH ROW EXECUTE FUNCTION set_updated_at()',
-      t, t
-    );
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = t) THEN
+        EXECUTE format(
+          'DROP TRIGGER IF EXISTS trg_%s_updated_at ON %s;
+           CREATE TRIGGER trg_%s_updated_at
+           BEFORE UPDATE ON %s
+           FOR EACH ROW EXECUTE FUNCTION set_updated_at()',
+          t, t, t, t
+        );
+    END IF;
   END LOOP;
 END$$;
+

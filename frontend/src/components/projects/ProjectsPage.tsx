@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { projectsAPI } from '@/services/api';
+import { projectsAPI } from '../../services/api';
 import { format } from 'date-fns';
 
 const PROJECT_COLORS = ['#6366f1','#8b5cf6','#ec4899','#10b981','#f59e0b','#3b82f6','#ef4444'];

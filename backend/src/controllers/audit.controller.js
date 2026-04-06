@@ -31,21 +31,22 @@ async function getLogs(req, res, next) {
       WHERE 1 = 1
     `;
     const params = [];
+    let idx = 1;
 
     // Non-admin users can only view their own audit records.
     if (!isAdmin) {
-      sql += ' AND al.user_id = ?';
+      sql += ` AND al.user_id = $${idx++}`;
       params.push(req.user.id);
     }
 
-    sql += ' ORDER BY al.created_at DESC LIMIT ? OFFSET ?';
+    sql += ` ORDER BY al.created_at DESC LIMIT $${idx++} OFFSET $${idx++}`;
     params.push(limit, offset);
 
     const result = await query(sql, params);
 
     const rows = result.rows.map((r) => ({
       ...r,
-      meta: tryParseJson(r.meta),
+      meta: r.meta, // pg handles JSONB automatically
     }));
 
     res.json(rows);

@@ -47,7 +47,7 @@ async function authenticate(req, res, next) {
     if (blacklist.has(payload.jti)) throw new AppError('Token has been revoked', 401);
 
     const result = await query(
-      'SELECT id, email, full_name, role, avatar_url, bio, is_suspended, email_verified FROM users WHERE id = ?',
+      'SELECT id, email, full_name, role, avatar_url, bio, is_suspended, email_verified FROM users WHERE id = $1',
       [payload.sub]
     );
 
@@ -78,7 +78,7 @@ async function rotateRefreshToken(req, res, next) {
     }
 
     const result = await query(
-      'SELECT id FROM sessions WHERE refresh_token = ? AND is_revoked = 0 AND expires_at > NOW()',
+      'SELECT id FROM sessions WHERE refresh_token = $1 AND is_revoked = FALSE AND expires_at > NOW()',
       [refreshToken]
     );
 
@@ -86,7 +86,7 @@ async function rotateRefreshToken(req, res, next) {
       throw new AppError('Session not found or revoked', 401);
     }
 
-    await query('UPDATE sessions SET is_revoked = 1 WHERE refresh_token = ?', [refreshToken]);
+    await query('UPDATE sessions SET is_revoked = TRUE WHERE refresh_token = $1', [refreshToken]);
 
     const jti = uuidv4();
     const newPayload = { sub: payload.sub, role: payload.role, jti };
@@ -97,7 +97,7 @@ async function rotateRefreshToken(req, res, next) {
     const expiresAt = new Date(Date.now() + REFRESH_TTL * 1000);
 
     await query(
-      `INSERT INTO sessions (id, user_id, refresh_token, jti, expires_at) VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO sessions (id, user_id, refresh_token, jti, expires_at) VALUES ($1, $2, $3, $4, $5)`,
       [uuidv4(), payload.sub, newRefresh, jti, expiresAt]
     );
 
@@ -126,11 +126,11 @@ function requireRole(...roles) {
 async function requireProjectMembership(req, res, next) {
   try {
     const userId = req.user.id;
-    const projectId = req.params.pid;
+    const projectId = req.params.pid || req.params.projectId; // Support both naming styles
 
     const result = await query(
-      `SELECT * FROM project_members 
-       WHERE user_id = ? AND project_id = ?`,
+      `SELECT role FROM project_members 
+       WHERE user_id = $1 AND project_id = $2`,
       [userId, projectId]
     );
 
@@ -138,6 +138,7 @@ async function requireProjectMembership(req, res, next) {
       return next(new AppError('Access denied: Not a project member', 403));
     }
 
+    req.projectRole = result.rows[0].role;
     next();
   } catch (err) {
     next(err);

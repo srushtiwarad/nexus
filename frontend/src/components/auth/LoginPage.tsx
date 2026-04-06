@@ -1,8 +1,8 @@
 // nexus/frontend/src/components/auth/LoginPage.tsx
 import { useState, FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { authAPI } from '@/services/api';
-import { useAuthStore } from '@/store/auth.store';
+import { authAPI } from '../../services/api';
+import { useAuthStore } from '../../store/auth.store';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
