@@ -19,7 +19,16 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const { data } = await authAPI.login({ email, password });
-      setAuth(data.user, data.accessToken, data.refreshToken);
+      const user = {
+        id: data.user.id,
+        email: data.user.email,
+        fullName: data.user.full_name ?? data.user.fullName ?? '',
+        role: data.user.role,
+        avatarUrl: data.user.avatar_url ?? undefined,
+        bio: data.user.bio ?? undefined,
+        emailVerified: !!data.user.email_verified,
+      };
+      setAuth(user, data.accessToken, data.refreshToken);
       navigate('/dashboard');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Login failed. Please try again.');
