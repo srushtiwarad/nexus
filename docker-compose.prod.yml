@@ -1,0 +1,90 @@
+# ============================================================
+# nexus/docker-compose.prod.yml
+# Production deployment stack
+# Usage: docker compose -f docker-compose.prod.yml up -d --build
+# ============================================================
+version: '3.9'
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: nexus-postgres-prod
+    restart: always
+    environment:
+      POSTGRES_DB: ${DB_NAME:-nexus_db}
+      POSTGRES_USER: ${DB_USER:-nexus_app}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-prodpassword123}
+    volumes:
+      - pg_data_prod:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USER:-nexus_app} -d ${DB_NAME:-nexus_db}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: nexus-redis-prod
+    restart: always
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-""}
+    volumes:
+      - redis_data_prod:/data
+    healthcheck:
+      test: ['CMD', 'sh', '-c', 'redis-cli -a "${REDIS_PASSWORD}" ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Backend (Node.js) ─────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      target: runner        # use production stage from backend/Dockerfile
+    container_name: nexus-backend-prod
+    restart: always
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-nexus_db}
+      DB_USER: ${DB_USER:-nexus_app}
+      DB_PASSWORD: ${DB_PASSWORD:-prodpassword123}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-""}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-changeme_prod_access_secret}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-changeme_prod_refresh_secret}
+      JWT_ACCESS_TTL: 15m
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://nexus.yourdomain.com}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-production-bucket}
+      LOG_LEVEL: info
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+
+  # ── Frontend (Vite -> Nginx) ─────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api/v1}
+        VITE_WS_URL: ${VITE_WS_URL:-/ws}
+    container_name: nexus-frontend-prod
+    restart: always
+    ports:
+      - "5173:80"    # Expose Frontend Nginx internally on port 5173
+    depends_on:
+      backend: { condition: service_healthy }
+
+volumes:
+  pg_data_prod:
+  redis_data_prod:
